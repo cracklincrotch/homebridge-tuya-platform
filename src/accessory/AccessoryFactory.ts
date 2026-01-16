@@ -44,7 +44,7 @@ import WeatherStationAccessory from './WeatherStationAccessory';
 import DoorbellAccessory from './DoorbellAccessory';
 import PetFeederAccessory from './PetFeederAccessory';
 import WhiteNoiseLightAccessory from './WhiteNoiseLightAccessory';
-
+import ElsPetLitterBoxAccessory from './ElsPetLitterBoxAccessory';
 
 export default class AccessoryFactory {
   static createAccessory(
@@ -122,6 +122,8 @@ export default class AccessoryFactory {
       case 'cwwsq':
         handler = new PetFeederAccessory(platform, accessory);
         break;
+      case 'msp':
+        handler = new ElsPetLitterBoxAccessory(platform, accessory);
       case 'mc':
         handler = new WindowAccessory(platform, accessory);
         break;
@@ -210,6 +212,7 @@ export default class AccessoryFactory {
       case 'scene':
         handler = new SceneAccessory(platform, accessory);
         break;
+
     }
 
     // IR Control Hub
