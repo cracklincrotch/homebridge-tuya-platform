@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { describe, expect, test } from '@jest/globals';
+import { describe, expect, test } from 'vitest';
 
 import TuyaOpenAPI from '../src/core/TuyaOpenAPI';
 import TuyaDevice from '../src/device/TuyaDevice';

@@ -1,17 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, expect, test, jest, beforeEach } from '@jest/globals';
+import { describe, expect, test, vi, beforeEach } from 'vitest';
 import { API, PlatformAccessory } from 'homebridge';
 import FanAccessory from '../src/accessory/FanAccessory';
 import TuyaDevice, { TuyaDeviceSchemaMode, TuyaDeviceSchemaType } from '../src/device/TuyaDevice';
 import { TuyaPlatform } from '../src/platform';
 
 // Mock modules
-jest.mock('../src/accessory/characteristic/Light');
-jest.mock('../src/accessory/characteristic/On');
-jest.mock('../src/accessory/characteristic/Active');
-jest.mock('../src/accessory/characteristic/RotationSpeed');
-jest.mock('../src/accessory/characteristic/SwingMode');
-jest.mock('../src/accessory/characteristic/LockPhysicalControls');
+vi.mock('../src/accessory/characteristic/Light');
+vi.mock('../src/accessory/characteristic/On');
+vi.mock('../src/accessory/characteristic/Active');
+vi.mock('../src/accessory/characteristic/RotationSpeed');
+vi.mock('../src/accessory/characteristic/SwingMode');
+vi.mock('../src/accessory/characteristic/LockPhysicalControls');
 
 describe('FanAccessory', () => {
   let mockPlatform: any;
@@ -24,32 +24,32 @@ describe('FanAccessory', () => {
     mockAPI = {
       hap: {
         Service: {
-          Fan: jest.fn(),
-          Fanv2: jest.fn(),
-          Lightbulb: jest.fn(),
-          Switch: jest.fn(),
-          AccessoryInformation: jest.fn(),
+          Fan: vi.fn(),
+          Fanv2: vi.fn(),
+          Lightbulb: vi.fn(),
+          Switch: vi.fn(),
+          AccessoryInformation: vi.fn(),
         },
         Characteristic: {
-          On: jest.fn(),
-          Active: jest.fn(),
-          RotationSpeed: jest.fn(),
-          RotationDirection: jest.fn(),
-          Brightness: jest.fn(),
+          On: vi.fn(),
+          Active: vi.fn(),
+          RotationSpeed: vi.fn(),
+          RotationDirection: vi.fn(),
+          Brightness: vi.fn(),
         },
         uuid: {
-          generate: jest.fn(() => 'mock-uuid'),
+          generate: vi.fn(() => 'mock-uuid'),
         },
       },
       user: {
-        persistPath: jest.fn(() => '/mock/path'),
+        persistPath: vi.fn(() => '/mock/path'),
       },
     } as unknown as API;
 
     // Mock device manager
     mockDeviceManager = {
-      getDevice: jest.fn(),
-      sendCommands: jest.fn(),
+      getDevice: vi.fn(),
+      sendCommands: vi.fn(),
     };
 
     // Mock platform
@@ -58,18 +58,18 @@ describe('FanAccessory', () => {
       Service: mockAPI.hap.Service,
       Characteristic: mockAPI.hap.Characteristic,
       log: {
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
       },
       options: {
         debug: false,
         debugLevel: '',
       },
       deviceManager: mockDeviceManager,
-      getDeviceConfig: jest.fn(() => undefined),
-      getDeviceSchemaConfig: jest.fn(() => undefined),
+      getDeviceConfig: vi.fn(() => undefined),
+      getDeviceSchemaConfig: vi.fn(() => undefined),
     } as unknown as TuyaPlatform;
 
     // Mock accessory
@@ -80,26 +80,26 @@ describe('FanAccessory', () => {
         deviceID: 'test-device-id',
       },
       services: [],
-      getService: jest.fn((name: string) => {
+      getService: vi.fn((name: string) => {
         return mockAccessory.services.find((s: any) => s.displayName === name || s.UUID === name);
       }),
-      addService: jest.fn((serviceType: any, name?: string, subtype?: string) => {
+      addService: vi.fn((serviceType: any, name?: string, subtype?: string) => {
         const service = {
           UUID: subtype || name || 'mock-service',
           displayName: name || 'Mock Service',
           subtype: subtype,
-          getCharacteristic: jest.fn(() => ({
-            onGet: jest.fn().mockReturnThis(),
-            onSet: jest.fn().mockReturnThis(),
-            setProps: jest.fn().mockReturnThis(),
-            updateValue: jest.fn().mockReturnThis(),
+          getCharacteristic: vi.fn(() => ({
+            onGet: vi.fn().mockReturnThis(),
+            onSet: vi.fn().mockReturnThis(),
+            setProps: vi.fn().mockReturnThis(),
+            updateValue: vi.fn().mockReturnThis(),
           })),
-          setCharacteristic: jest.fn().mockReturnThis(),
+          setCharacteristic: vi.fn().mockReturnThis(),
         };
         mockAccessory.services.push(service);
         return service;
       }),
-      removeService: jest.fn(),
+      removeService: vi.fn(),
     } as unknown as PlatformAccessory;
   });
 
