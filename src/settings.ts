@@ -1,34 +1,14 @@
-// eslint-disable-next-line
-// @ts-ignore
-import { createRequire } from 'node:module';
-const require = createRequire(import.meta.url);
-
-const schema = require('../config.schema.json') as { pluginAlias: string };
-const { pluginAlias } = schema;
-
-// eslint-disable-next-line
-// @ts-ignore
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
-const configSchema = JSON.parse(
-  readFileSync(new URL('../config.schema.json', import.meta.url), 'utf8'),
-) as { pluginAlias: string };
+// config.schema.json lives at repo root, and also beside dist/ after build
+const schemaPath = path.resolve(__dirname, '../config.schema.json');
+const schema = JSON.parse(readFileSync(schemaPath, 'utf8')) as { pluginAlias: string };
 
-const platformName = configSchema.pluginAlias;
+// package.json lives at repo root, and also beside dist/ after build
+const pkgPath = path.resolve(__dirname, '../package.json');
+const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { name: string };
 
-const pkg = JSON.parse(
-  readFileSync(new URL('../package.json', import.meta.url), 'utf8')
-) as { name: string };
+export const PLATFORM_NAME = schema.pluginAlias;
+export const PLUGIN_NAME = pkg.name;
 
-export const pluginName = pkg.name;
-
-/**
- * This is the name of the platform that users will use to register the plugin in the Homebridge config.json
- */
-
-export const PLATFORM_NAME = platformName;
-
-/**
- * This must match the name of your plugin as defined the package.json
- */
-export const PLUGIN_NAME = pluginName;

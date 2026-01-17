@@ -9,12 +9,10 @@ import retry from 'async-await-retry';
 // eslint-disable-next-line
 // @ts-ignore
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
-const pkg = JSON.parse(
-  readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
-) as { version: string };
-
-const { version } = pkg;
+const pkgPath = path.resolve(__dirname, '../../package.json');
+const { version } = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version: string };
 
 import Logger, { PrefixLogger } from '../util/Logger';
 

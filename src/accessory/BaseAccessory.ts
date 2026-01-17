@@ -3,7 +3,7 @@
 import { PlatformAccessory, Service, Characteristic, Nullable, CharacteristicValue } from 'homebridge';
 //import { debounce } from 'debounce';
 import  debounce  from 'debounce';
-import isEqual from 'lodash.isequal';
+import { isDeepStrictEqual } from 'node:util';
 
 import { TuyaDeviceSchema, TuyaDeviceSchemaIntegerProperty, TuyaDeviceSchemaMode, TuyaDeviceStatus } from '../device/TuyaDevice';
 import { TuyaPlatform } from '../platform';
@@ -289,7 +289,7 @@ export default class OverridedBaseAccessory extends BaseAccessory {
       _hidden: schemaConfig.hidden,
     } as TuyaDeviceSchema;
 
-    if (!isEqual(oldSchema, schema)) {
+    if (!isDeepStrictEqual(oldSchema, schema)) {
       this.log.debug('Override schema %o => %o', oldSchema, schema);
     }
 
@@ -327,7 +327,7 @@ export default class OverridedBaseAccessory extends BaseAccessory {
       status.value = this.eval(schemaConfig.onGet, this.device, oldStatus.value);
     }
 
-    if (!isEqual(oldStatus, status)) {
+    if (!isDeepStrictEqual(oldStatus, status)) {
       this.log.debug('Override status %o => %o', oldStatus, status);
     }
 
@@ -353,7 +353,7 @@ export default class OverridedBaseAccessory extends BaseAccessory {
         oldCommand.value = this.eval(schemaConfig.onSet, this.device, command.value);
       }
 
-      if (!isEqual(oldCommand, command)) {
+      if (!isDeepStrictEqual(oldCommand, command)) {
         this.log.debug('Override command %o => %o', command, oldCommand);
         command.code = oldCommand.code;
         command.value = oldCommand.value;
