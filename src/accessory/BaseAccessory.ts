@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-empty-function */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { PlatformAccessory, Service, Characteristic, Nullable, CharacteristicValue } from 'homebridge';
-import { debounce } from 'debounce';
+//import { debounce } from 'debounce';
+import  debounce  from 'debounce';
 import isEqual from 'lodash.isequal';
 
 import { TuyaDeviceSchema, TuyaDeviceSchemaIntegerProperty, TuyaDeviceSchemaMode, TuyaDeviceStatus } from '../device/TuyaDevice';

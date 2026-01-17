@@ -124,6 +124,7 @@ export default class AccessoryFactory {
         break;
       case 'msp':
         handler = new ElsPetLitterBoxAccessory(platform, accessory);
+        break;
       case 'mc':
         handler = new WindowAccessory(platform, accessory);
         break;
