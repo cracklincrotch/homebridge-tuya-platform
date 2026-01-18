@@ -342,6 +342,25 @@ export default class TuyaOpenAPI {
     return this.request('delete', path, params, null);
   }
 
+  // Trigger the device to report its current signal to Tuya Cloud.
+  async issueSignalDetection(deviceId: string, deviceType: 'WiFi' | 'zigbee' = 'WiFi') {
+    return this.post('/v2.0/cloud/thing/signal/detection/issue', {
+      device_id: deviceId,
+      device_type: deviceType,
+    });
+  }
+
+  // Query the most recent signal value Tuya has stored.
+  async getThingSignal(deviceId: string, deviceType: 'wifi' | 'zigbee' = 'wifi') {
+    return this.get('/v2.0/cloud/thing/' + deviceId + '/' + deviceType + '/signal');
+  }
+
+  // Convenience wrapper for Tuya v2.0 Wi-Fi/Zigbee signal endpoint.
+  // GET /v2.0/cloud/thing/{device_id}/{device_type}/signal
+  async getThingSignalV2(deviceId: string, deviceType: string) {
+    return this.get('/v2.0/cloud/thing/' + deviceId + '/' + deviceType + '/signal');
+  }
+
   _getSign(accessId: string, accessKey: string, accessToken = '', timestamp = 0, nonce: string, stringToSign: string) {
     const message = [accessId, accessToken, timestamp, nonce, stringToSign].join('');
     const sign = Crypto.createHmac('SHA256', accessKey).update(message).digest('hex').toUpperCase();

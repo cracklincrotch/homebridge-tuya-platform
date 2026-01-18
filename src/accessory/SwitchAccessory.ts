@@ -7,7 +7,7 @@ import { configureCurrentTemperature } from './characteristic/CurrentTemperature
 import { configureCurrentRelativeHumidity } from './characteristic/CurrentRelativeHumidity';
 
 const SCHEMA_CODE = {
-  ON: ['switch', 'switch_1'], // switch_2, switch_3, switch_4, ..., switch_usb1, switch_usb2, switch_usb3, ..., switch_backlight
+  ON: ['switch', 'switch_1', 'switch_on'], // switch_2, switch_3, switch_4, ..., switch_usb1, switch_usb2, switch_usb3, ..., switch_backlight
   CURRENT: ['cur_current'],
   POWER: ['cur_power'],
   VOLTAGE: ['cur_voltage'],
@@ -35,11 +35,10 @@ export default class SwitchAccessory extends BaseAccessory {
       (schema) => schema.code.startsWith('switch') && schema.type === TuyaDeviceSchemaType.Boolean,
     );
 
-    schemata.forEach((schema) => {
+    schemata.forEach((schema, index) => {
       const name = (schemata.length === 1) ? this.device.name : schema.code;
-      this.configureSwitch(schema, name);
+      this.configureSwitch(schema, name, index === 0);
     });
-
 
     // Other
     configureCurrentTemperature(this, undefined, this.getSchema(...SCHEMA_CODE.CURRENT_TEMP));
@@ -52,24 +51,75 @@ export default class SwitchAccessory extends BaseAccessory {
     return this.Service.Switch;
   }
 
-  configureSwitch(schema: TuyaDeviceSchema, name: string) {
-
+  configureSwitch(schema: TuyaDeviceSchema, name: string, isPrimary: boolean) {
     const service = this.accessory.getService(schema.code)
       || this.accessory.addService(this.mainService(), name, schema.code);
 
     configureName(this, service, name);
     configureOn(this, service, schema);
 
-    if (schema.code === this.getSchema(...SCHEMA_CODE.ON)?.code) {
+    const cur = this.getSchema('cur_current');
+    const vol = this.getSchema('cur_voltage');
+    const pwr = this.getSchema('cur_power');
+    const tot = this.getSchema('add_ele');
+
+/*    this.platform.log.info(`[${this.device.name}] energy schema codes:`, {
+      on: schema.code,
+      cur_current: cur?.code,
+      cur_voltage: vol?.code,
+      cur_power: pwr?.code,
+      add_ele: tot?.code,
+    });
+
+    this.platform.log.info(`[${this.device.name}] energy status values:`, {
+      cur_current: this.getStatus('cur_current')?.value,
+      cur_voltage: this.getStatus('cur_voltage')?.value,
+      cur_power: this.getStatus('cur_power')?.value,
+      add_ele: this.getStatus('add_ele')?.value,
+    });
+*/
+
+    if (isPrimary) {
+      const mkIntSchema = (code: string, unit: string, scale: number) => ({
+        code,
+        type: TuyaDeviceSchemaType.Integer,
+        // "mode" exists on TuyaDeviceSchema; if TS complains, cast as any
+        mode: 'ro',
+        property: { unit, min: 0, max: 1000000, scale, step: 1 },
+      } as any);
+
+      const isCZ = this.device.category === 'cz';
+
+      const voltageSchema =
+        this.getSchema('cur_voltage')
+        ?? (isCZ && this.getStatus('cur_voltage') ? mkIntSchema('cur_voltage', 'V', 1) : undefined);
+     
+       const currentSchema =
+        this.getSchema('cur_current')
+        ?? (isCZ && this.getStatus('cur_current') ? mkIntSchema('cur_current', 'mA', 0) : undefined);
+
+      const powerSchema =
+        this.getSchema('cur_power')
+        ?? (isCZ && this.getStatus('cur_power') ? mkIntSchema('cur_power', 'W', 1) : undefined);       // /10
+
+      const totalSchema =
+        this.getSchema('add_ele')
+        ?? (isCZ && this.getStatus('add_ele') ? mkIntSchema('add_ele', '度', 3) : undefined);          // /1000
+
       configureEnergyUsage(
         this.platform.api,
         this,
         service,
-        this.getSchema(...SCHEMA_CODE.CURRENT),
-        this.getSchema(...SCHEMA_CODE.POWER),
-        this.getSchema(...SCHEMA_CODE.VOLTAGE),
-        this.getSchema(...SCHEMA_CODE.TOTAL_POWER),
+        currentSchema,
+        powerSchema,
+        voltageSchema,
+        totalSchema,
       );
+
+/*      this.platform.log.info(
+        `[${this.device.name}] characteristics count=${service.characteristics.length} uuids=${service.characteristics.map(c => c.UUID).join(',')}`,
+      );
+*/
     }
   }
 

@@ -1,14 +1,21 @@
 /* eslint-disable @typescript-eslint/no-empty-function */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { PlatformAccessory, Service, Characteristic, Nullable, CharacteristicValue } from 'homebridge';
-//import { debounce } from 'debounce';
+
 import  debounce  from 'debounce';
+
+import createWifiRSSICharacteristic from './characteristic/WifiRSSI';
+import createWifiSignalLevelCharacteristic from './characteristic/WifiSignalLevel';
+
 import { isDeepStrictEqual } from 'node:util';
 
 import { TuyaDeviceSchema, TuyaDeviceSchemaIntegerProperty, TuyaDeviceSchemaMode, TuyaDeviceStatus } from '../device/TuyaDevice';
 import { TuyaPlatform } from '../platform';
 import { limit } from '../util/util';
 import { PrefixLogger } from '../util/Logger';
+
+// Homebridge's `WithUUID` type is not always exported; define a minimal local version.
+type WithUUID<T> = T & { UUID: string };
 
 const MANUFACTURER = 'Tuya Inc.';
 
@@ -42,6 +49,74 @@ class BaseAccessory {
   public intialized = false;
 
   public adaptiveLightingController?;
+    
+  private wifiInfoAttached = false;
+  private static wifiCharsRegistered = false;
+  
+  protected maybeAttachWifiInfo(service: Service) {
+    if (this.wifiInfoAttached) return;
+        
+    // Never attach to AccessoryInformation
+    if (service.UUID === this.Service.AccessoryInformation.UUID) return;
+    if (service.UUID === this.Service.Battery.UUID) return;
+
+        
+    // Only attach to “primary” services (no subtype)
+    // This avoids DP sub-services like switch_inching, litterbox sub-switches, etc.
+    if ((service as any).subtype !== undefined) return;
+        
+    this.addWifiInfoCharacteristicsToService(service);
+    this.wifiInfoAttached = true;
+  }
+    
+  protected attachWifiInfoFallbackIfNeeded() {
+    if (this.wifiInfoAttached) return;
+
+    const svc = this.accessory.services.find(s =>
+      s.UUID !== this.Service.AccessoryInformation.UUID &&
+      s.UUID !== this.Service.Battery.UUID
+    );
+
+    if (svc) {
+      this.addWifiInfoCharacteristicsToService(svc);
+      this.wifiInfoAttached = true;
+    }
+  }
+
+  private ensureWifiCharacteristicsRegistered() {
+    if (BaseAccessory.wifiCharsRegistered) {
+      return;
+    }
+
+    const hapChar: any = this.platform.api.hap.Characteristic as any;
+
+    if (!hapChar.WifiRSSI) {
+      hapChar.WifiRSSI = createWifiRSSICharacteristic(this.platform.api);
+    }
+    if (!hapChar.WifiSignalLevel) {
+      hapChar.WifiSignalLevel = createWifiSignalLevelCharacteristic(this.platform.api);
+    }
+
+    BaseAccessory.wifiCharsRegistered = true;
+  }
+
+  private translateWifiSignalLevel(level: unknown): string {
+    if (typeof level !== 'string') {
+      return 'Unknown';
+    }
+
+    // Tuya commonly returns Chinese values
+    const map: Record<string, string> = {
+      '优': 'Excellent',
+      '优秀': 'Very Good',
+      '良': 'Good',
+      '一般': 'Fair',
+      '差': 'Poor',
+    };
+
+    return map[level] ?? level;
+  }
+
 
   constructor(
     public readonly platform: TuyaPlatform,
@@ -63,6 +138,42 @@ class BaseAccessory {
       .setCharacteristic(this.Characteristic.SerialNumber, this.device.uuid)
     ;
   }
+
+  private addWifiInfoCharacteristicsToService(service: Service) {
+    
+      // Skip non-visible or unhelpful services
+      if (service.UUID === this.Service.AccessoryInformation.UUID) return;
+      if (service.UUID === this.Service.BatteryService.UUID) return;
+
+      this.ensureWifiCharacteristicsRegistered();
+
+      const hapChar: any = this.platform.api.hap.Characteristic as any;
+
+      if (!service.testCharacteristic(hapChar.WifiRSSI)) {
+        service.addOptionalCharacteristic(hapChar.WifiRSSI);
+      }
+      if (!service.testCharacteristic(hapChar.WifiSignalLevel)) {
+        service.addOptionalCharacteristic(hapChar.WifiSignalLevel);
+      }
+
+      service.getCharacteristic(hapChar.WifiRSSI).onGet(() => {
+        const d: any = this.device as any;
+        const extra = d?.extra ?? {};
+        // accept multiple possible storage keys
+        const v = extra.wifiRssi ?? extra.wifi_rssi ?? extra.wifi?.rssi ?? extra.wifiSignal?.signal;
+        return (typeof v === 'number') ? v : -100;
+      });
+
+      service.getCharacteristic(hapChar.WifiSignalLevel).onGet(() => {
+        const d: any = this.device as any;
+        const extra = d?.extra ?? {};
+        const raw = extra.wifiSignalLevelEn ?? extra.wifiSignalLevelRaw ?? extra.wifi?.level ?? extra.wifiSignal?.signalLevel;
+        return this.translateWifiSignalLevel(raw);
+       
+      });
+    
+  }
+
 
   addBatteryService() {
     const percentSchema = this.getSchema(...SCHEMA_CODE.BATTERY_PERCENT);
@@ -107,19 +218,46 @@ class BaseAccessory {
         });
     }
   }
+    
+  configureServices() {
+        //
+  }
+    
+  getOrAddService(serviceType: WithUUID<typeof Service>, name?: string, subtype?: string) {
+    let service = this.accessory.getServiceById(serviceType, subtype ?? '');
+
+    if (!service) {
+      const effectiveSubtype = subtype ?? '';
+      service = this.accessory.addService(serviceType, name ?? this.device.name, effectiveSubtype);
+    }
+
+    if (name) {
+      service.setCharacteristic(this.Characteristic.Name, name);
+    }
+
+    // Attach wifi info once, to the primary service only.
+    this.maybeAttachWifiInfo(service);
+
+    return service;
+  }
 
   configureStatusActive() {
     for (const service of this.accessory.services) {
       if (!service.testCharacteristic(this.Characteristic.StatusActive)) { // silence warning
         service.addOptionalCharacteristic(this.Characteristic.StatusActive);
       }
+
       service.getCharacteristic(this.Characteristic.StatusActive)
         .onGet(() => this.device.online);
+
+      this.maybeAttachWifiInfo(service);
     }
+    this.attachWifiInfoFallbackIfNeeded();
   }
 
   async updateAllValues() {
     for (const service of this.accessory.services) {
+      
       for (const characteristic of service.characteristics) {
         if (characteristic.UUID === this.Characteristic.ProgrammableSwitchEvent.UUID) {
           continue;
@@ -130,10 +268,17 @@ class BaseAccessory {
         if (getHandler) {
           try {
             newValue = await getHandler();
-          } catch (error) {
-            // TODO: why `characteristic.updateValue(HapStatusError)` not working?
-            // newValue = error as Error;
-            continue;
+          } catch (err: any) {
+            // Some get handlers intentionally throw HapStatusError (e.g., device offline).
+            // During internal polling, treat that as a characteristic error instead of crashing the child bridge.
+            newValue = (err instanceof Error) ? err : new Error(String(err));
+            this.log.debug(
+              '[%s/%s/%s] Get handler threw: %s',
+              service.constructor.name,
+              service.subtype,
+              characteristic.constructor.name,
+              (newValue as Error).message,
+            );
           }
         }
 
@@ -249,10 +394,6 @@ class BaseAccessory {
 
   requiredSchema(): string[][] {
     return [];
-  }
-
-  configureServices() {
-    //
   }
 
   async onDeviceInfoUpdate(info) {

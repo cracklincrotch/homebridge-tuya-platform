@@ -13,13 +13,18 @@ export function configureEnergyUsage(
   totalSchema?: TuyaDeviceSchema,
 ) {
 
+  const eveType = createEveTypeCharacteristic(api);
+  if (!service.testCharacteristic(eveType)) {
+    service.addCharacteristic(eveType);
+  }
+
   if (currentSchema) {
     const amperes = createAmperesCharacteristic(api);
     if (!service.testCharacteristic(amperes)) {
       service.addCharacteristic(amperes);
     }
     service.getCharacteristic(amperes).onGet(
-      createStatusGetter(accessory, currentSchema, isUnit(currentSchema, 'mA') ? 1000 : 0),
+      createStatusGetter(accessory, currentSchema, isUnit(currentSchema, 'mA') ? 1000 : 1),
     );
   }
 
@@ -28,7 +33,21 @@ export function configureEnergyUsage(
     if (!service.testCharacteristic(watts)) {
       service.addCharacteristic(watts);
     }
-    service.getCharacteristic(watts).onGet(createStatusGetter(accessory, powerSchema));
+    service.getCharacteristic(watts).onGet(() => {
+      const raw = accessory.getStatus(powerSchema.code)!.value as number;
+      const prop = powerSchema.property as TuyaDeviceSchemaIntegerProperty;
+
+      // Default: follow schema
+      let scale = prop.scale;
+
+      // Tuya standard sockets often report cur_power in deciwatts (scale=1),
+      // but some devices incorrectly advertise scale=0.
+      if (powerSchema.code === 'cur_power' && scale === 0) {
+        scale = 1;
+      }
+
+      return raw / Math.pow(10, scale);
+    });
   }
 
   if (voltageSchema) {
@@ -36,7 +55,22 @@ export function configureEnergyUsage(
     if (!service.testCharacteristic(volts)) {
       service.addCharacteristic(volts);
     }
-    service.getCharacteristic(volts).onGet(createStatusGetter(accessory, voltageSchema));
+
+    service.getCharacteristic(volts).onGet(() => {
+      const raw = accessory.getStatus(voltageSchema.code)!.value as number;
+      const prop = voltageSchema.property as TuyaDeviceSchemaIntegerProperty;
+
+      // normal Tuya scaling first
+      let v = raw / Math.pow(10, prop.scale);
+
+      // Many Tuya "cz" plugs report decivolts (e.g. 1187 = 118.7V) but advertise scale=0.
+      // If it looks like decivolts, fix it.
+      if (voltageSchema.code === 'cur_voltage' && prop.scale === 0 && v > 400) {
+        v = v / 10;
+      }
+
+      return v;
+    });
   }
 
   if (totalSchema) {
@@ -57,7 +91,7 @@ function createStatusGetter(accessory: BaseAccessory, schema: TuyaDeviceSchema, 
   divisor *= Math.pow(10, property.scale);
   return () => {
     const status = accessory.getStatus(schema.code)!;
-
+    if (!status || status.value === undefined || status.value === null) return 0;
     return (status.value as number) / divisor;
   };
 }
@@ -114,6 +148,21 @@ function createKilowattHourCharacteristic(api: API) {
         perms: [api.hap.Perms.NOTIFY, api.hap.Perms.PAIRED_READ],
         unit: 'kWh',
       });
+    }
+  };
+}
+
+function createEveTypeCharacteristic(api: API) {
+  return class EveType extends api.hap.Characteristic {
+    static readonly UUID = 'E863F007-079E-48FF-8F27-9C2605A29F52';
+
+    constructor() {
+      super('Eve Type', EveType.UUID, {
+        format: api.hap.Formats.UINT8,
+        perms: [api.hap.Perms.PAIRED_READ],
+      });
+      // 0x07 is commonly used by Eve Energy-style devices (energy outlet).
+      this.value = 0x07;
     }
   };
 }

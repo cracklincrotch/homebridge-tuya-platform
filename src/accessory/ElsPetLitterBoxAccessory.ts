@@ -4,33 +4,35 @@ import { configureName } from './characteristic/Name';
 import { configureOn } from './characteristic/On';
 
 type BoolDp = {
-  code: string;
+  codes: string[];
   name: string;
   service: 'Switch' | 'Lightbulb';
   momentary?: boolean;
 };
 
 const DPS: BoolDp[] = [
-  { code: 'switch1',          name: 'Power',        service: 'Switch' },
-  { code: 'lightloop_switch', name: 'Litter Box Door Light',   service: 'Switch' },
-  { code: 'deodorize',        name: 'Deodorize the Litter Box',    service: 'Switch' },
-  { code: 'UV_autoswitch',    name: 'Litter Box UV Light',      service: 'Switch' },
-  { code: 'sleepmode_switch', name: 'Sleep Mode',   service: 'Switch' },
+  { codes: ['switch1', 'switch_1', 'switch', 'power', 'start'], name: 'Power', service: 'Switch' },
 
-  // “Buttons”
-  { code: 'manual',           name: 'Clean the Litter Boxw',    service: 'Switch', momentary: true },
-  { code: 'reset',            name: 'Factory Reset',        service: 'Switch', momentary: true },
+  { codes: ['lightloop_switch', 'light'], name: 'Litter Box Door Light', service: 'Switch' },
 
-  // write-only; expose if schema exists
-  { code: 'volume_reset',     name: 'Litter Added', service: 'Switch', momentary: true },
+  { codes: ['deodorize', 'deodorization'], name: 'Deodorize the Litter Box', service: 'Switch' },
+
+  { codes: ['UV_autoswitch', 'uv'], name: 'Litter Box UV Light', service: 'Switch' },
+
+  { codes: ['sleepmode_switch', 'sleep'], name: 'Sleep Mode', service: 'Switch' },
+
+  { codes: ['manual', 'manual_clean'], name: 'Clean the Litter Box', service: 'Switch', momentary: true },
+
+  { codes: ['reset', 'factory_reset'], name: 'Factory Reset', service: 'Switch', momentary: true },
+
+  { codes: ['volume_reset'], name: 'Litter Added', service: 'Switch', momentary: true },
 ];
-
 export default class ElsPetLitterBoxAccessory extends BaseAccessory {
 
   requiredSchema() {
     // SwitchAccessory requires switch/switch_1  [oai_citation:0‡SwitchAccessory.ts.txt](sediment://file_0000000023ec722f8e93b0ff49a258e1)
     // This device uses switch1  [oai_citation:1‡cat-toilet.json](sediment://file_00000000900071f5b0fe9f59b7575e9b)
-    return [['switch1']];
+    return [['switch_1', 'switch1', 'switch', 'power', 'start']];
   }
 
   configureServices() {
@@ -42,7 +44,7 @@ export default class ElsPetLitterBoxAccessory extends BaseAccessory {
     }
 
     for (const dp of DPS) {
-      const schema = this.getSchema(dp.code);
+      const schema = this.getSchema(...dp.codes);
       if (!schema || schema.type !== TuyaDeviceSchemaType.Boolean) {
         continue;
       }
@@ -196,7 +198,7 @@ export default class ElsPetLitterBoxAccessory extends BaseAccessory {
 
   private configureAlarmFaultSensor() {
     const schema = this.getSchema('alarm');
-    if (!schema || schema.code !== 'alarm') return;
+    if (!schema || schema.type !== TuyaDeviceSchemaType.Integer) return;
 
     const service =
       this.accessory.getService('alarm_fault') ||
@@ -215,7 +217,8 @@ export default class ElsPetLitterBoxAccessory extends BaseAccessory {
   }
 
   private configureAlarmTypeSensors() {
-    if (!this.getSchema('alarm')) return;
+    const schema = this.getSchema('alarm');
+    if (!schema || schema.type !== TuyaDeviceSchemaType.Integer) return;
 
     const stuckSvc =
       this.accessory.getService('alarm_stuck') ||
@@ -280,45 +283,49 @@ export default class ElsPetLitterBoxAccessory extends BaseAccessory {
 //        await this.sendCommands([{ code: dpCode, value: quantized } as any], true);
 //      });
     const prop = schema.property as any;
-    const min = Number(prop?.min ?? 0);
-    //
-    // In case schema.property.max fails to parse restrict it to a default of 1800 seconds
+
+    const fallbackMin =
+      (dpCode === 'clean_wait_time') ? 60 :
+      (dpCode === 'UV_time' || dpCode === 'deodorize_time') ? 120 : 0;
+
+    const effectiveMin = Number.isFinite(Number(prop?.min)) ? Number(prop.min) : fallbackMin;
+
     const defaultMax = (dpCode === 'UV_time' || dpCode === 'deodorize_time' || dpCode === 'clean_wait_time') ? 1800 : 3600;
     const max = Number(prop?.max ?? defaultMax);
     const step = Number(prop?.step ?? 1);
 
     const ch = service.getCharacteristic(this.Characteristic.SetDuration);
 
-    // Tell clients (EG: Eve) the legal range/step
+    // HomeKit-facing range: allow 0 so HAP doesn't log illegal-value warnings.
     ch.setProps({
-      minValue: min,
+      minValue: 0,
       maxValue: max,
       minStep: step,
     });
 
-  const readCurrent = () => {
-    const raw = Number(this.getStatus(dpCode)?.value);
-    const v = Number.isFinite(raw) ? raw : min;
+    const quantize = (value: number) => {
+      const v = Number.isFinite(value) ? value : effectiveMin;
+      const clamped = Math.max(effectiveMin, Math.min(max, v));
+      return effectiveMin + Math.round((clamped - effectiveMin) / step) * step;
+    };
 
-    const clamped = Math.max(min, Math.min(max, v));
-    const quantized = min + Math.round((clamped - min) / step) * step;
+    const readCurrent = () => quantize(Number(this.getStatus(dpCode)?.value));
 
-    return quantized;
-  };
+    try { ch.updateValue(readCurrent()); } catch {}
 
-  // Set an initial legal value immediately (prevents startup warnings)
-  try { ch.updateValue(readCurrent()); } catch {}
+    ch.onGet(() => readCurrent())
+      .onSet(async (value) => {
+        this.checkOnlineStatus();
 
-  ch.onGet(() => readCurrent())
-    .onSet(async (value) => {
-      this.checkOnlineStatus();
+        // HomeKit may send 0. Treat that as "use minimum" for Tuya.
+        const q = quantize(Number(value));
 
-      const v = Number(value);
-      const clamped = Math.max(min, Math.min(max, v));
-      const quantized = min + Math.round((clamped - min) / step) * step;
+        await this.sendCommands([{ code: dpCode, value: q } as any], true);
 
-      await this.sendCommands([{ code: dpCode, value: quantized } as any], true);
-    });
+        // Keep UI consistent if HomeKit sent 0
+        try { ch.updateValue(q); } catch {}
+      });
+
   }
 
   private configureBoolean(schema: TuyaDeviceSchema, name: string, serviceType: 'Switch' | 'Lightbulb') {
