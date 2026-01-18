@@ -63,22 +63,6 @@ export default class SwitchAccessory extends BaseAccessory {
     const pwr = this.getSchema('cur_power');
     const tot = this.getSchema('add_ele');
 
-/*    this.platform.log.info(`[${this.device.name}] energy schema codes:`, {
-      on: schema.code,
-      cur_current: cur?.code,
-      cur_voltage: vol?.code,
-      cur_power: pwr?.code,
-      add_ele: tot?.code,
-    });
-
-    this.platform.log.info(`[${this.device.name}] energy status values:`, {
-      cur_current: this.getStatus('cur_current')?.value,
-      cur_voltage: this.getStatus('cur_voltage')?.value,
-      cur_power: this.getStatus('cur_power')?.value,
-      add_ele: this.getStatus('add_ele')?.value,
-    });
-*/
-
     if (isPrimary) {
       const mkIntSchema = (code: string, unit: string, scale: number) => ({
         code,
@@ -115,11 +99,6 @@ export default class SwitchAccessory extends BaseAccessory {
         voltageSchema,
         totalSchema,
       );
-
-/*      this.platform.log.info(
-        `[${this.device.name}] characteristics count=${service.characteristics.length} uuids=${service.characteristics.map(c => c.UUID).join(',')}`,
-      );
-*/
     }
   }
 
